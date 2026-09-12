@@ -23,6 +23,8 @@ into the **`Appointment`** table of the HotDoc database designed in Task 7.2C.
 | `requirements.txt` | Python dependencies |
 | `Dockerfile` / `.dockerignore` | Container image (listens on port 8000) |
 | `env.example` | Template for the git-ignored local `.env` |
+| `app-k8s.yaml` | Kubernetes ConfigMap, Deployment and NodePort Service (no secrets) |
+| `Jenkinsfile` | CI/CD pipeline: build, push to Docker Hub, deploy to Kubernetes |
 
 ## 1. Prepare the database
 
@@ -75,7 +77,93 @@ docker build -t hotdoc-app:latest .
 docker run --rm -p 8000:8000 --env-file .env hotdoc-app:latest
 ```
 
-## 4. Video demonstration checklist
+## 4. Kubernetes + Jenkins CI/CD
+
+Architecture:
+
+```
+local --push--> GitHub --> Jenkins (10.10.10.100)
+                              |  docker build
+                              |  docker push -> Docker Hub (bronardo/hotdoc-app)
+                              v  kubectl (kubeconfig)
+                        K8s node (10.10.10.10) -- pull image --> NodePort 30080
+                              |
+                              v
+                        MySQL VM (10.10.10.20:3306, hotdoc_db)
+```
+
+### One-time infrastructure setup
+
+1. **MySQL VM (`10.10.10.20`)** — load the Task 7.2C schema and seed data,
+   create the application user reachable from the pod network, and make MySQL
+   listen on the VNet interface:
+
+   ```sql
+   CREATE DATABASE IF NOT EXISTS hotdoc_db;
+   CREATE USER 'hotdoc_user'@'%' IDENTIFIED BY '<strong-password>';
+   GRANT ALL PRIVILEGES ON hotdoc_db.* TO 'hotdoc_user'@'%';
+   FLUSH PRIVILEGES;
+   ```
+
+   ```bash
+   mysql -u root -p hotdoc_db < planning/7.2c/init.sql
+   mysql -u hotdoc_user -p hotdoc_db < planning/7.2c/populate5.sql
+   mysql -u hotdoc_user -p hotdoc_db < planning/7.2c/tasks.sql
+   # one extra AVAILABLE slot for the successful-insert demonstration:
+   mysql -u hotdoc_user -p hotdoc_db -e \
+     "INSERT INTO TimeSlot (practitioner_id, slot_start_time, slot_end_time, is_available) \
+      VALUES (1, '2026-09-20 09:00:00', '2026-09-20 09:15:00', TRUE);"
+   ```
+
+   Ensure `bind-address = 0.0.0.0` in `my.cnf` and that TCP 3306 is open to
+   the cluster node / pod subnet.
+
+2. **Jenkins server (`10.10.10.100`)** — copy the cluster kubeconfig so the
+   `jenkins` user can run `kubectl` against `10.10.10.10`:
+
+   ```bash
+   sudo mkdir -p /var/lib/jenkins/.kube
+   # copy admin.conf from 10.10.10.10 to /var/lib/jenkins/.kube/config
+   sudo chown -R jenkins:jenkins /var/lib/jenkins/.kube
+   sudo -u jenkins kubectl --kubeconfig=/var/lib/jenkins/.kube/config get nodes
+   ```
+
+3. **Jenkins credentials** (already configured):
+   - `docker-hub-creds` — Docker Hub username (`bronardo`) + password/token;
+     used both to push the image and to create the `dockerhub-registry`
+     image-pull Secret.
+   - `dbuser_hotdoc_user` — MySQL username (`hotdoc_user`) + password; the
+     pipeline turns it into the `mysql-vm-secret` Secret
+     (`db-username`, `db-password`). No DB password is stored in git.
+   - `k8s-node-ip-secret` — **Secret text** holding only the cluster node IP
+     (`10.10.10.10`); bound via `credentials()` and used as
+     `--server=https://<ip>:6443` on every `kubectl` call, so no node IP is
+     hard-coded in the pipeline.
+
+### What the pipeline does (`Jenkinsfile`)
+
+1. Checkout from GitHub.
+2. Build `bronardo/hotdoc-app:${BUILD_NUMBER}` and `:latest`.
+3. Push both tags to Docker Hub.
+4. Create/update `mysql-vm-secret` and `dockerhub-registry` on the cluster
+   (`kubectl create secret ... --dry-run=client -o yaml | kubectl apply -f -`).
+5. Substitute `__IMAGE_TAG__` in `app-k8s.yaml` with the build number and
+   `kubectl apply` (the new immutable image tag triggers the rollout). All
+   `kubectl` calls target the node IP from `k8s-node-ip-secret` via
+   `--server=https://<ip>:6443`.
+6. Wait for `kubectl rollout status` (120 s timeout).
+
+After a successful build the UI is at **http://10.10.10.10:30080**.
+
+### Files
+
+- `app-k8s.yaml` — ConfigMap (host `10.10.10.20`, port, db name), Deployment
+  (env from ConfigMap + `mysql-vm-secret`, readiness/liveness probes,
+  `imagePullSecrets`), NodePort Service 30080. **Contains no secrets.**
+- `Jenkinsfile` — the pipeline above; every secret is accessed through
+  Jenkins `withCredentials` and never echoed or written to git.
+
+## 5. Video demonstration checklist
 
 1. Show the table first:
    `mysql -u hotdoc_user -p hotdoc_db -e "SELECT * FROM Appointment;"`
@@ -87,17 +175,17 @@ docker run --rm -p 8000:8000 --env-file .env hotdoc-app:latest
    slot / status, click **Insert**, show the green confirmation, and re-run
    the SELECT to show the new row.
 
-## Security notes
+## 6. Security notes
 
-- No credentials are stored in source or git. Local secrets live in `.env`
-  (git-ignored); in Kubernetes the password will be supplied via a Secret
-  created out-of-band (`kubectl create secret generic ...
-  --from-literal=db-password=...`).
+- No credentials are stored in source or git. Local development secrets live
+  in `.env` (git-ignored); the Kubernetes password is stored in the
+  `mysql-vm-secret` Secret, which the pipeline creates at deploy time from the
+  restricted Jenkins credential `dbuser_hotdoc_user` (never printed to logs or
+  written to the manifest).
+- The Docker Hub credential `docker-hub-creds` is used only inside
+  `withCredentials` blocks (push + image-pull Secret creation); the database
+  credential `dbuser_hotdoc_user` and the node IP `k8s-node-ip-secret` are
+  likewise bound only through Jenkins credentials — none appear in git, and
+  secret-bearing commands run without shell xtrace.
 - `planning/` is git-ignored and was never pushed (it contains unit PDFs and
   infrastructure notes).
-
-## Still to be finalised (infra)
-
-`app-k8s.yaml` (secret-free manifest), `Jenkinsfile`, and the real MySQL VM
-IP / image-transfer path between Jenkins (`10.10.10.100`) and the cluster node
-(`10.10.10.10`) are added once those details are confirmed.

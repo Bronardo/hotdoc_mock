@@ -11,3 +11,5 @@ __pycache__
 *.md
 Dockerfile
 .dockerignore
+Jenkinsfile
+app-k8s.yaml

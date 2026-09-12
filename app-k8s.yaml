@@ -1,0 +1,108 @@
+# ============================================================================
+# HotDoc mock - Kubernetes deployment manifest (SIT772 Task 9.2D)
+#
+# This file contains NO secrets.
+#   - The database credentials are stored in the `mysql-vm-secret` Secret,
+#     created out-of-band by the Jenkins pipeline from the Jenkins credential
+#     `dbuser_hotdoc_user`.
+#   - The image pull credentials are stored in `dockerhub-registry`, created
+#     by the pipeline from the Jenkins credential `docker-hub-creds`.
+#
+# The placeholder __IMAGE_TAG__ is replaced by the Jenkins build number at
+# deploy time (see Jenkinsfile).
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-vm-config
+data:
+  DB_HOST: "10.10.10.20"
+  DB_PORT: "3306"
+  DB_NAME: "hotdoc_db"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hotdoc-app
+  labels:
+    app: hotdoc-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hotdoc-app
+  template:
+    metadata:
+      labels:
+        app: hotdoc-app
+    spec:
+      imagePullSecrets:
+        - name: dockerhub-registry
+      containers:
+        - name: hotdoc-app
+          image: bronardo/hotdoc-app:__IMAGE_TAG__
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: mysql-vm-config
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: mysql-vm-config
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: mysql-vm-config
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-vm-secret
+                  key: db-username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-vm-secret
+                  key: db-password
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hotdoc-app-service
+spec:
+  type: NodePort
+  selector:
+    app: hotdoc-app
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30080
+      protocol: TCP
