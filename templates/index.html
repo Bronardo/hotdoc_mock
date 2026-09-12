@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HotDoc Mock - New Appointment</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container py-4" style="max-width: 760px;">
+    <h1 class="h3 mb-1">HotDoc Mock &mdash; Book an Appointment</h1>
+    <p class="text-muted">
+        SIT772 Task 9.2D &mdash; embedded SQL form inserting one record into the
+        <code>Appointment</code> table (Flask + MySQL).
+    </p>
+
+    {% if alert %}
+    <div class="alert alert-{{ alert.type }} alert-dismissible fade show" role="alert">
+        {{ alert.text }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+
+    <!-- novalidate: server-side validation (shown above) is what is being demonstrated -->
+    <form method="POST" action="/" novalidate>
+        <div class="card shadow-sm">
+            <div class="card-body">
+
+                <div class="mb-3">
+                    <label for="patient_id" class="form-label">Patient <span class="text-danger">*</span></label>
+                    <select class="form-select" id="patient_id" name="patient_id">
+                        <option value="" selected>-- please select a patient --</option>
+                        {% for p in refs.patients %}
+                        <option value="{{ p.id }}" {% if form_data.patient_id == p.id|string %}selected{% endif %}>{{ p.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="practitioner_id" class="form-label">Practitioner <span class="text-danger">*</span></label>
+                    <select class="form-select" id="practitioner_id" name="practitioner_id">
+                        <option value="" selected>-- please select a practitioner --</option>
+                        {% for pr in refs.practitioners %}
+                        <option value="{{ pr.id }}" {% if form_data.practitioner_id == pr.id|string %}selected{% endif %}>{{ pr.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="appointment_type_id" class="form-label">Appointment Type <span class="text-danger">*</span></label>
+                    <select class="form-select" id="appointment_type_id" name="appointment_type_id">
+                        <option value="" selected>-- please select a type --</option>
+                        {% for t in refs.appointment_types %}
+                        <option value="{{ t.id }}" {% if form_data.appointment_type_id == t.id|string %}selected{% endif %}>{{ t.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="time_slot_id" class="form-label">Time Slot <span class="text-danger">*</span></label>
+                    <select class="form-select" id="time_slot_id" name="time_slot_id">
+                        <option value="" selected>-- please select a time slot --</option>
+                        {% for ts in refs.time_slots %}
+                        <option value="{{ ts.id }}"
+                                class="{{ '' if ts.available else 'text-muted' }}"
+                                {% if not ts.available %}disabled{% endif %}
+                                {% if form_data.time_slot_id == ts.id|string %}selected{% endif %}>
+                            {{ ts.label }}{{ '' if ts.available else '  [already booked]' }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="status_code" class="form-label">Appointment Status <span class="text-danger">*</span></label>
+                    <select class="form-select" id="status_code" name="status_code">
+                        <option value="" selected>-- please select a status --</option>
+                        {% for s in refs.statuses %}
+                        <option value="{{ s }}" {% if form_data.status_code == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="cancellation_reason" class="form-label">Cancellation Reason <span class="text-muted">(optional)</span></label>
+                    <textarea class="form-control" id="cancellation_reason" name="cancellation_reason"
+                              rows="2">{{ form_data.cancellation_reason or '' }}</textarea>
+                </div>
+
+                <div class="form-check mb-4">
+                    <input class="form-check-input" type="checkbox" value="on" id="is_first_visit"
+                           name="is_first_visit" {% if form_data.is_first_visit %}checked{% endif %}>
+                    <label class="form-check-label" for="is_first_visit">This is the patient's first visit</label>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Insert</button>
+                <a href="/" class="btn btn-outline-secondary">Reset</a>
+            </div>
+        </div>
+    </form>
+    <p class="text-muted small mt-3">
+        Fields marked <span class="text-danger">*</span> are mandatory. Invalid or
+        missing data is rejected before the INSERT and no record is added.
+    </p>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

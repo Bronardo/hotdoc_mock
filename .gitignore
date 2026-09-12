@@ -1,1 +1,27 @@
+# Planning / private task materials (never publish unit PDFs or infra notes)
 planning/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Local secrets / environment overrides (tracked template is named env.example)
+.env
+.env.*
+*.local.env
+secrets-*.yaml
+*-secret.yaml
+app-k8s.local.yaml
+
+# Logs
+*.log
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
