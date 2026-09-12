@@ -1,5 +1,7 @@
 # HotDoc Mock — SIT772 Task 9.2D (User Interface and Embedded SQL)
 
+[![GitHub repository](https://img.shields.io/badge/GitHub-Bronardo%2Fhotdoc__mock-blue)](https://github.com/Bronardo/hotdoc_mock)
+
 A small **Flask** web application with an HTML form that inserts one record
 into the **`Appointment`** table of the HotDoc database designed in Task 7.2C.
 

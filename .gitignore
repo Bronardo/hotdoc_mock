@@ -25,3 +25,6 @@ app-k8s.local.yaml
 .idea/
 .DS_Store
 Thumbs.db
+
+# Submission materials (report, video script, demo SQL) - local only
+submission/
